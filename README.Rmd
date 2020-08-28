@@ -1,0 +1,26 @@
+---
+title: "Using Historical and landuse changes made for CMIP6"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, error = F)
+```
+
+## Objective and background
+
+The objective of this repository is to show how to use the *NetCDF* available on the future harmonized land-use forcing [dataset for CMIP6](https://luh.umd.edu/data.shtml#LUH1_Data), which includes the historical dataset form 1500-2016 and the proyections from 2015 to 2100, plus the recent expanded version till 2300.
+
+### Files and packages needed
+
+For any of the periods above from the link the file **states.nc**, and name it accordingly to remember which time period an SSP has been imported. The packages needed for all of this to work are:
+
+* ncdf4
+* raster
+* sf
+* tidyverse
+
+### Loading and extracting information from NC files
+
+
+
