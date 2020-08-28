@@ -9,7 +9,7 @@ knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, error = F)
 
 ## Objective and background
 
-The objective of this repository is to show how to use the *NetCDF* available on the future harmonized land-use forcing [dataset for CMIP6](https://luh.umd.edu/data.shtml#LUH1_Data), which includes the historical dataset form 1500-2016 and the proyections from 2015 to 2100, plus the recent expanded version till 2300.
+The objective of this repository is to show how to use the *NetCDF* available on the future harmonized land-use forcing [dataset for CMIP6](https://luh.umd.edu/data.shtml#LUH1_Data), which includes the historical dataset form 850-2016 and the proyections from 2015 to 2100, plus the recent expanded version till 2300.
 
 ### Files and packages needed
 
@@ -22,5 +22,110 @@ For any of the periods above from the link the file **states.nc**, and name it a
 
 ### Loading and extracting information from NC files
 
+```{r loadpacks}
+library(ncdf4)
+library(raster)
+library(sf)
+library(tidyverse)
+```
+
+The fist thing to do is to load the file in order to get the info from the file, we will first do that for the present:
+
+```{r, eval = FALSE}
+Present <- nc_open("states.nc")
+```
+
+```{r loadpresent, echo = FALSE}
+Present <- nc_open("/home/derek/Documents/Pew/states.nc")
+```
+
+All the NetCDF files of land use have 3 dimensions (latitude, longitude and year) and the variables shown in the table bellow:
+
+```{r Table, echo=FALSE}
+Variables <- data.frame(Name = rep(NA, times = length(Present$var)), Long_Name = NA, NA_Value = NA)
+
+for(i in 1:nrow(Variables)){
+ Variables$Name[i] <- Present$var[[i]]$name
+ Variables$Long_Name[i] <- Present$var[[i]]$longname
+ Variables$NA_Value[i] <- Present$var[[i]]$missval
+}
+
+knitr::kable(Variables)
+```
+
+### Reading the table dimensions
+
+The first step is to read the dimensions, that is time, lat and lon
+
+```{r}
+time <- ncvar_get(Present, "time")
+
+lat <- ncvar_get(Present, "lat")
+
+lon <- ncvar_get(Present, "lon")
+```
+
+each one of this variables will get us an array:
+
+* **time:** years since the year 850
+* **lat:** latitude in degrees_north
+* **lon:** longitude in degrees_east
+
+The order of this dimensions is important, since when reading it as a layer we can read part of the file, and this is assinged as an array, this will be most sensitive for *time*, because this is a world layer with 1166 time layers, which would be hard to handle for most computers **in most times you want to read only part of the time-slices**, more details on the methods for this can be taken from [@hurtt2011harmonization]
+
+### Pulling a variable from the file and croping it to a raster
+
+As an example for this repository a polygon of central Chile shown bellow as an SF polygon and available in this repository:
+
+```{r Polygon}
+Chile <- read_rds("Chile_Central.rds")
+```
 
 
+```{r, echo = F}
+ggplot() + geom_sf(data = Chile) + theme_bw()
+```
+
+In the code bellow we will read the files from year 1950 till the present for the urban environment, in order to do that it is key to understand that we have to start reading from year 1950 which corresponds to the 1100th year in the *time dimension*. And we also need to find the variable for urban in the *Name* column in the table above, given that we would read the Urban data as follows:
+
+```{r}
+Urban <- ncvar_get(Present, "urban", start = c(1,#lon
+                                            1,#lat
+                                            1100# time
+                                            ))
+```
+
+
+This will also be an array, the following code will loop it and crop it to fit the polygon above
+
+```{r}
+Stack <- list()
+for(y in 1:dim(Urban)[3]){
+  Time <- Urban[,,y]
+  Stack[[y]] <- raster(t(Time), 
+                       xmn = min(lon), xmx = max(lon),
+                       ymn = min(lat), ymx = max(lat)) %>%   crop(Chile)
+}
+Stack <- Stack %>% reduce(stack) %>% mask(Chile)%>% readAll()
+```
+
+The result will be a stack where each layer will be a time-slice. In this case `r nlayers(Stack)` the proportion of Urban area in each cell if we look at the latest this is the result:
+
+```{r, echo = FALSE}
+Now <- Stack[[nlayers(Stack)]] %>% 
+  as("SpatialPixelsDataFrame") %>% 
+  as.data.frame() %>% 
+  rename(Urban = layer)
+
+ggplot() + geom_raster(data = Now, aes(x = x, y = y, fill = Urban)) + geom_sf(data = Chile, alpha = 0, size = 0.2) + theme_bw() + labs(x = NULL, y = NULL) + scale_fill_viridis_c()
+```
+
+### Closing conection with the file
+
+The last step is to close the conection with the *NetCDF* file
+
+```{r}
+nc_close(Present)
+```
+
+## References
